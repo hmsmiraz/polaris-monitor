@@ -274,21 +274,21 @@ install_master() {
   mkdir -p "$LOG_DIR"
 
   step "3/6  Installing PostgreSQL"
-  "$MASTER_DIR/venv/bin/python" - << 'PYEOF'
+  "$MASTER_DIR/venv/bin/python" - << PYEOF
 import sys; sys.path.insert(0, "$MASTER_DIR")
 from installers import postgres_installer
 postgres_installer.setup()
 PYEOF
 
   step "4/6  Installing Prometheus"
-  "$MASTER_DIR/venv/bin/python" - << 'PYEOF'
+  "$MASTER_DIR/venv/bin/python" - << PYEOF
 import sys; sys.path.insert(0, "$MASTER_DIR")
 from installers import prometheus_installer
 prometheus_installer.setup()
 PYEOF
 
   step "5/6  Installing Grafana"
-  "$MASTER_DIR/venv/bin/python" - << 'PYEOF'
+  "$MASTER_DIR/venv/bin/python" - << PYEOF
 import sys; sys.path.insert(0, "$MASTER_DIR")
 from installers import grafana_installer
 grafana_installer.setup()
