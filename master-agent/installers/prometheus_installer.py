@@ -84,10 +84,17 @@ WantedBy=multi-user.target
 
 
 def setup(skip_if_installed: bool = True):
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from prometheus.config_manager import write_prometheus_config
+
     if skip_if_installed and is_installed():
         print("  [SKIP] Prometheus already installed")
+        write_prometheus_config()
         write_service()
-        return
-    install_prometheus()
-    write_service()
+    else:
+        install_prometheus()
+        write_prometheus_config()
+        write_service()
+    run("systemctl enable --now prometheus", check=False)
     print("  [OK] Prometheus service configured")
