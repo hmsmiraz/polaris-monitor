@@ -127,13 +127,13 @@ install_deps() {
   case "$OS_FAMILY" in
     debian)
       apt-get update -qq
-      apt-get install -y -qq curl wget git jq python3-venv python3-pip
+      apt-get install -y -qq curl wget git jq python3-venv python3-pip libpq-dev gcc
       ;;
     rhel)
-      $PKG_MGR install -y curl wget git jq python3-pip
+      $PKG_MGR install -y curl wget git jq python3-pip libpq-devel gcc
       ;;
     suse)
-      zypper install -y curl wget git jq python3-pip
+      zypper install -y curl wget git jq python3-pip libpq5-devel gcc
       ;;
   esac
   ok "System dependencies ready"
