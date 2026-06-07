@@ -156,7 +156,7 @@ polaris-monitor/
 ### Step 1 — Clone the Repository
 
 ```bash
-git clone https://github.com/your-org/polaris-monitor.git
+git clone https://github.com/hmsmiraz/polaris-monitor.git
 cd polaris-monitor
 ```
 
