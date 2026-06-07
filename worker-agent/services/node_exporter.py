@@ -67,8 +67,8 @@ def _install_linux(port: int = 9100):
         run(f"chmod +x {_linux_bin()}")
 
     # Create dedicated system user
-    run(f"id -u {NODE_EXPORTER_USER} &>/dev/null || "
-        f"useradd --no-create-home --shell /bin/false {NODE_EXPORTER_USER}")
+    run(f"id -u {NODE_EXPORTER_USER} >/dev/null 2>&1 || "
+        f"useradd --system --no-create-home --shell /bin/false {NODE_EXPORTER_USER}")
 
     _write_linux_service(port)
     run("systemctl daemon-reload")

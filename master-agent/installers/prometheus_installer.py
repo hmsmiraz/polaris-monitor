@@ -39,8 +39,8 @@ def install_prometheus():
         run(f"cp -r {extracted}/consoles {PROMETHEUS_CONFIG_DIR}/ 2>/dev/null || true")
         run(f"cp -r {extracted}/console_libraries {PROMETHEUS_CONFIG_DIR}/ 2>/dev/null || true")
 
-    run(f"id -u {PROMETHEUS_USER} &>/dev/null || "
-        f"useradd --no-create-home --shell /bin/false {PROMETHEUS_USER}")
+    run(f"id -u {PROMETHEUS_USER} >/dev/null 2>&1 || "
+        f"useradd --system --no-create-home --shell /bin/false {PROMETHEUS_USER}")
 
     for d in [PROMETHEUS_DATA_DIR, PROMETHEUS_CONFIG_DIR,
               Path("/etc/prometheus/file_sd")]:
