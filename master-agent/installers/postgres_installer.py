@@ -108,7 +108,9 @@ def _patch_pg_hba():
 def setup(skip_if_installed: bool = True):
     if skip_if_installed and is_installed():
         print("  [SKIP] PostgreSQL already installed")
-        setup_database()
-        return
-    install_postgres()
+        run("systemctl enable postgresql", check=False)
+        run("systemctl start postgresql", check=False)
+        time.sleep(3)
+    else:
+        install_postgres()
     setup_database()
