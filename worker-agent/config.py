@@ -20,14 +20,13 @@ DISK_ALERT_THRESHOLD   = float(os.getenv("POLARIS_DISK_THRESHOLD",   "90"))
 METRICS_INTERVAL    = int(os.getenv("POLARIS_METRICS_INTERVAL",    "30"))
 HEARTBEAT_INTERVAL  = int(os.getenv("POLARIS_HEARTBEAT_INTERVAL",  "60"))
 SSH_CHECK_INTERVAL  = int(os.getenv("POLARIS_SSH_CHECK_INTERVAL",  "1800"))
-ALERT_SUSTAIN_SECONDS = int(os.getenv("POLARIS_ALERT_SUSTAIN",     "300"))
+ALERT_SUSTAIN_SECONDS = int(os.getenv("POLARIS_ALERT_SUSTAIN",     "0"))
 
 # ── Auto-reboot ────────────────────────────────────────────────────────────────
 REBOOT_ENABLED          = os.getenv("POLARIS_REBOOT_ENABLED", "false").lower() == "true"
 REBOOT_CPU_THRESHOLD    = float(os.getenv("POLARIS_REBOOT_CPU_THRESHOLD",    "95"))
 REBOOT_MEMORY_THRESHOLD = float(os.getenv("POLARIS_REBOOT_MEMORY_THRESHOLD", "95"))
-# Change this to 30 or 60 for testing; default is 300 (5 min)
-REBOOT_SUSTAIN_SECONDS  = int(os.getenv("POLARIS_REBOOT_SUSTAIN", "300"))
+REBOOT_SUSTAIN_SECONDS  = int(os.getenv("POLARIS_REBOOT_SUSTAIN", "180"))
 
 NODE_EXPORTER_PORT = int(os.getenv("POLARIS_NODE_EXPORTER_PORT", "9100"))
 

@@ -30,11 +30,14 @@ def _send_alert(master_ip: str, master_port: int, agent_id: str,
 def _check_threshold(
     key: str, current_value: float, threshold: float, sustain: int
 ) -> bool:
-    """Returns True when value has been above threshold for sustain seconds."""
+    """Returns True when value has been above threshold for sustain seconds.
+    sustain=0 fires immediately on first detection."""
     now = time.time()
     if current_value >= threshold:
         if key not in _breach_start:
             _breach_start[key] = now
+            if sustain == 0:
+                return True
         elif now - _breach_start[key] >= sustain:
             return True
     else:

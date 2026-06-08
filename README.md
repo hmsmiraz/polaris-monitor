@@ -622,10 +622,10 @@ Edit the file directly or set environment variables before starting the service.
 | `POLARIS_DISK_THRESHOLD` | `90` | Disk % to trigger a `high_disk` alert |
 | `POLARIS_METRICS_INTERVAL` | `30` | Metrics send interval (s) |
 | `POLARIS_HEARTBEAT_INTERVAL` | `60` | Heartbeat interval (s) |
-| `POLARIS_ALERT_SUSTAIN` | `300` | Seconds threshold must be breached before alerting |
+| `POLARIS_ALERT_SUSTAIN` | `0` | Seconds threshold must be breached before alerting (`0` = immediate) |
 | `POLARIS_REBOOT_CPU_THRESHOLD` | `95` | CPU % to trigger auto-reboot |
 | `POLARIS_REBOOT_MEMORY_THRESHOLD` | `95` | Memory % to trigger auto-reboot |
-| `POLARIS_REBOOT_SUSTAIN` | `300` | Seconds threshold must be breached before auto-reboot |
+| `POLARIS_REBOOT_SUSTAIN` | `180` | Seconds threshold must be breached before auto-reboot (3 min) |
 
 To **enable auto-reboot**, set `REBOOT_ENABLED = True` in config.py (disabled by default):
 
@@ -774,7 +774,7 @@ sudo nano /opt/polaris/worker-agent/config.py
 REBOOT_ENABLED = True
 REBOOT_CPU_THRESHOLD    = 95   # reboot if CPU  >= 95% for REBOOT_SUSTAIN_SECONDS
 REBOOT_MEMORY_THRESHOLD = 95   # reboot if RAM  >= 95% for REBOOT_SUSTAIN_SECONDS
-REBOOT_SUSTAIN_SECONDS  = 300  # 5 minutes (use 60 for testing)
+REBOOT_SUSTAIN_SECONDS  = 180  # 3 minutes
 ```
 
 ```bash
@@ -799,12 +799,12 @@ Detection uses the systemd journal (`journalctl`), which persists across AWS sto
 
 | Alert Type | Default Threshold | Severity | Sustain Window |
 |---|---|---|---|
-| `high_cpu` | CPU > 90% | warning | 5 min |
-| `high_memory` | Memory > 90% | warning | 5 min |
-| `high_disk` | Disk > 90% | critical | 5 min |
+| `high_cpu` | CPU > 90% | warning | immediate |
+| `high_memory` | Memory > 90% | warning | immediate |
+| `high_disk` | Disk > 90% | critical | immediate |
 | `ssh_failure` | SSH port 22 unreachable | critical | immediate |
 | `ssh_recovered` | SSH back up | warning | immediate |
-| `auto_reboot` | CPU > 95% or Memory > 95% | critical | 5 min |
+| `auto_reboot` | CPU > 95% or Memory > 95% | critical | 3 min (180s) |
 
 All thresholds are configurable — see [Worker Configuration](#worker----optpolarisworker-agentconfigpy).
 
