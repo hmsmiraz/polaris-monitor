@@ -5,36 +5,58 @@ import requests
 _reason_cache = None
 
 
+def _try_journal() -> str:
+    """Detect via systemd journal (works on AWS stop/start where wtmp is cleared)."""
+    try:
+        r = subprocess.run(
+            "journalctl --list-boots --no-pager 2>/dev/null | wc -l",
+            shell=True, capture_output=True, text=True, timeout=5
+        )
+        boot_count = int(r.stdout.strip() or "0")
+        if boot_count < 1:
+            return ""
+        if boot_count < 2:
+            # Only one boot on record — fresh launch or stop/start with cleared journal
+            return "system"
+        # Check if previous boot ended with a reboot command (vs poweroff/crash)
+        r2 = subprocess.run(
+            "journalctl -b -1 -n 50 --no-pager 2>/dev/null | grep -ic 'reached target.*reboot\\|starting reboot'",
+            shell=True, capture_output=True, text=True, timeout=10
+        )
+        return "manual" if int(r2.stdout.strip() or "0") > 0 else "system"
+    except Exception:
+        return ""
+
+
+def _try_last() -> str:
+    """Fall back to wtmp-based detection (works when journal is unavailable)."""
+    try:
+        r = subprocess.run(
+            "last -x 2>/dev/null | grep -E '^reboot|^shutdown' | head -5",
+            shell=True, capture_output=True, text=True, timeout=5
+        )
+        events = []
+        for line in r.stdout.strip().split("\n"):
+            s = line.strip()
+            if s.startswith("reboot"):
+                events.append("reboot")
+            elif s.startswith("shutdown"):
+                events.append("shutdown")
+        if len(events) >= 2:
+            return "manual" if events[1] == "shutdown" else "system"
+        if len(events) == 1:
+            return "system"
+        return ""
+    except Exception:
+        return ""
+
+
 def _detect_reboot_reason() -> str:
     """Check shutdown records to determine why the node last rebooted."""
     global _reason_cache
     if _reason_cache is not None:
         return _reason_cache
-    try:
-        # Filter to only boot/shutdown events (skips user login lines)
-        result = subprocess.run(
-            "last -x 2>/dev/null | grep -E '^reboot|^shutdown' | head -5",
-            shell=True, capture_output=True, text=True, timeout=5
-        )
-        events = []
-        for line in result.stdout.strip().split("\n"):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if stripped.startswith("reboot"):
-                events.append("reboot")
-            elif stripped.startswith("shutdown"):
-                events.append("shutdown")
-        # events are newest-first: events[0]=current boot, events[1]=what ended previous session
-        if len(events) >= 2:
-            _reason_cache = "manual" if events[1] == "shutdown" else "system"
-        elif len(events) == 1:
-            # Only one boot record — fresh instance launch or stop/start
-            _reason_cache = "system"
-        else:
-            _reason_cache = "unknown"
-    except Exception:
-        _reason_cache = "unknown"
+    _reason_cache = _try_journal() or _try_last() or "unknown"
     return _reason_cache
 
 
