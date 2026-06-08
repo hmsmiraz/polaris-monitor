@@ -160,21 +160,26 @@ def _ssh_table(uid, title, x, y, w, h):
         "targets": [
             {"datasource": {"type": "prometheus"},
              "expr": "polaris_node_ssh", "instant": True, "refId": "A", "format": "table"},
-            {"datasource": {"type": "prometheus"},
-             "expr": "polaris_node_last_ssh_check_seconds", "instant": True, "refId": "B", "format": "table"},
-            {"datasource": {"type": "prometheus"},
-             "expr": "polaris_node_last_seen_seconds", "instant": True, "refId": "C", "format": "table"},
         ],
         "transformations": [
-            {"id": "merge", "options": {}},
             {"id": "organize", "options": {
-                "excludeByName": {"Time": True, "__name__": True, "job": True, "instance": True, "private_ip": True},
+                "excludeByName": {
+                    "Time": True, "__name__": True, "job": True,
+                    "instance": True, "private_ip": True,
+                },
                 "renameByName": {
-                    "Value #A": "SSH Status",
-                    "Value #B": "Last SSH Check",
-                    "Value #C": "Last Seen",
                     "agent_id": "Agent ID",
                     "hostname": "Hostname",
+                    "last_ssh_check": "Last SSH Check",
+                    "last_seen": "Last Seen",
+                    "Value": "SSH Status",
+                },
+                "indexByName": {
+                    "agent_id": 0,
+                    "hostname": 1,
+                    "Value": 2,
+                    "last_ssh_check": 3,
+                    "last_seen": 4,
                 },
             }},
         ],
@@ -189,10 +194,6 @@ def _ssh_table(uid, title, x, y, w, h):
                          "type": "value"}]},
                      {"id": "custom.displayMode", "value": "color-background"},
                  ]},
-                {"matcher": {"id": "byName", "options": "Last SSH Check"},
-                 "properties": [{"id": "unit", "value": "dateTimeFromNow"}]},
-                {"matcher": {"id": "byName", "options": "Last Seen"},
-                 "properties": [{"id": "unit", "value": "dateTimeFromNow"}]},
             ],
         },
     }

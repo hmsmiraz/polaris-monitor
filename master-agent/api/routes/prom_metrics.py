@@ -5,11 +5,14 @@ from services.node_service import get_all_nodes
 router = APIRouter()
 
 
-def _labels(n: dict) -> str:
-    agent_id  = (n["agent_id"]  or "").replace('"', '')
-    hostname  = (n["hostname"]  or "").replace('"', '')
-    private_ip = (n["private_ip"] or "").replace('"', '')
-    return f'agent_id="{agent_id}",hostname="{hostname}",private_ip="{private_ip}"'
+def _safe(v) -> str:
+    return (v or "").replace('"', '').replace('\\', '')
+
+
+def _fmt_ts(dt) -> str:
+    if not dt:
+        return "never"
+    return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
 @router.get("/prom-metrics", response_class=PlainTextResponse, include_in_schema=False)
@@ -22,33 +25,23 @@ def prom_metrics():
         "# TYPE polaris_node_up gauge",
     ]
     for n in nodes:
-        lines.append(f'polaris_node_up{{{_labels(n)}}} {1 if n["status"] == "online" else 0}')
+        lbl = (f'agent_id="{_safe(n["agent_id"])}",'
+               f'hostname="{_safe(n["hostname"])}",'
+               f'private_ip="{_safe(n["private_ip"])}"')
+        lines.append(f'polaris_node_up{{{lbl}}} {1 if n["status"] == "online" else 0}')
 
     lines += [
-        "# HELP polaris_node_ssh SSH port-22 reachability: 1=ok 0=failed",
+        "# HELP polaris_node_ssh SSH port-22 reachability: 1=ok 0=failed -1=unknown",
         "# TYPE polaris_node_ssh gauge",
     ]
     for n in nodes:
         ssh = n.get("ssh_status", "unknown")
         val = 1 if ssh == "ok" else (0 if ssh == "failed" else -1)
-        lines.append(f'polaris_node_ssh{{{_labels(n)}}} {val}')
-
-    lines += [
-        "# HELP polaris_node_last_seen_seconds Unix timestamp of last heartbeat",
-        "# TYPE polaris_node_last_seen_seconds gauge",
-    ]
-    for n in nodes:
-        ts = n["last_seen"]
-        if ts:
-            lines.append(f'polaris_node_last_seen_seconds{{{_labels(n)}}} {ts.timestamp():.0f}')
-
-    lines += [
-        "# HELP polaris_node_last_ssh_check_seconds Unix timestamp of last SSH check",
-        "# TYPE polaris_node_last_ssh_check_seconds gauge",
-    ]
-    for n in nodes:
-        ts = n.get("last_ssh_check")
-        if ts:
-            lines.append(f'polaris_node_last_ssh_check_seconds{{{_labels(n)}}} {ts.timestamp():.0f}')
+        lbl = (f'agent_id="{_safe(n["agent_id"])}",'
+               f'hostname="{_safe(n["hostname"])}",'
+               f'private_ip="{_safe(n["private_ip"])}",'
+               f'last_ssh_check="{_fmt_ts(n.get("last_ssh_check"))}",'
+               f'last_seen="{_fmt_ts(n.get("last_seen"))}"')
+        lines.append(f'polaris_node_ssh{{{lbl}}} {val}')
 
     return "\n".join(lines) + "\n"
