@@ -62,7 +62,9 @@ def get_node(agent_id: str) -> Optional[dict]:
                 """
                 SELECT id, agent_id, hostname, private_ip, public_ip,
                        os_info, kernel_version, node_exporter_port,
-                       status, registered_at, last_seen
+                       status, registered_at, last_seen,
+                       ssh_status, last_ssh_check,
+                       last_boot_time, reboot_reason
                 FROM nodes WHERE agent_id = %s
                 """,
                 (agent_id,),
@@ -93,13 +95,18 @@ def get_all_nodes() -> List[dict]:
 def update_boot_time(agent_id: str, boot_dt, worker_reason: str = None):
     node = get_node(agent_id)
     stored = node.get("last_boot_time") if node else None
-    if stored is None or abs((boot_dt - stored).total_seconds()) > 60:
-        if node and node.get("reboot_reason") == "agent_triggered":
+    current_reason = node.get("reboot_reason") if node else "unknown"
+
+    boot_changed = stored is None or abs((boot_dt - stored).total_seconds()) > 60
+    reason_unresolved = current_reason in ("unknown", None)
+
+    if boot_changed or reason_unresolved:
+        if current_reason == "agent_triggered":
             reason = "agent"
         elif worker_reason in ("manual", "system"):
             reason = worker_reason
         else:
-            reason = "unknown"
+            reason = current_reason if current_reason not in ("unknown", None, "agent_triggered") else "unknown"
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute(

@@ -6,24 +6,31 @@ _reason_cache = None
 
 
 def _detect_reboot_reason() -> str:
-    """Check last shutdown records to determine why the node rebooted."""
+    """Check shutdown records to determine why the node last rebooted."""
     global _reason_cache
     if _reason_cache is not None:
         return _reason_cache
     try:
+        # Filter to only boot/shutdown events (skips user login lines)
         result = subprocess.run(
-            ["last", "-x", "-n", "10"],
-            capture_output=True, text=True, timeout=5
+            "last -x 2>/dev/null | grep -E '^reboot|^shutdown' | head -5",
+            shell=True, capture_output=True, text=True, timeout=5
         )
         events = []
         for line in result.stdout.strip().split("\n"):
-            if line.startswith("reboot"):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("reboot"):
                 events.append("reboot")
-            elif line.startswith("shutdown"):
+            elif stripped.startswith("shutdown"):
                 events.append("shutdown")
-        # events are newest-first; events[0]=current boot, events[1]=what ended last session
+        # events are newest-first: events[0]=current boot, events[1]=what ended previous session
         if len(events) >= 2:
             _reason_cache = "manual" if events[1] == "shutdown" else "system"
+        elif len(events) == 1:
+            # Only one boot record — fresh instance launch or stop/start
+            _reason_cache = "system"
         else:
             _reason_cache = "unknown"
     except Exception:
