@@ -80,12 +80,25 @@ def get_all_nodes() -> List[dict]:
                 """
                 SELECT id, agent_id, hostname, private_ip, public_ip,
                        os_info, kernel_version, node_exporter_port,
-                       status, registered_at, last_seen
+                       status, registered_at, last_seen,
+                       ssh_status, last_ssh_check
                 FROM nodes
                 ORDER BY registered_at DESC
                 """
             )
             return [_row_to_node(row) for row in cur.fetchall()]
+
+
+def update_ssh_check(agent_id: str, status: str):
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE nodes SET ssh_status = %s, last_ssh_check = NOW()
+                WHERE agent_id = %s
+                """,
+                (status, agent_id),
+            )
 
 
 def mark_stale_nodes_offline(timeout_seconds: int = 120):
@@ -125,4 +138,6 @@ def _row_to_node(row: tuple) -> dict:
         "status": row[8],
         "registered_at": row[9],
         "last_seen": row[10],
+        "ssh_status": row[11] if len(row) > 11 else "unknown",
+        "last_ssh_check": row[12] if len(row) > 12 else None,
     }

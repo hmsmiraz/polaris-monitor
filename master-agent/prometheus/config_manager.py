@@ -95,6 +95,11 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
+  - job_name: 'polaris_master'
+    static_configs:
+      - targets: ['localhost:8000']
+    metrics_path: /api/v1/prom-metrics
+
   - job_name: 'node_exporter'
     file_sd_configs:
       - files:

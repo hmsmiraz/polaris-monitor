@@ -1,6 +1,9 @@
 from database.connection import get_db
 
 SCHEMA_SQL = """
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS ssh_status      VARCHAR(20) DEFAULT 'unknown';
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS last_ssh_check  TIMESTAMP;
+
 CREATE TABLE IF NOT EXISTS join_tokens (
     id          SERIAL PRIMARY KEY,
     token       VARCHAR(255) UNIQUE NOT NULL,

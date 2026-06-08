@@ -3,10 +3,11 @@ import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import register, heartbeat, metrics, alerts, nodes, status
+from api.routes import register, heartbeat, metrics, alerts, nodes, status, prom_metrics
 from database.connection import init_pool, close_pool
 from database.schema import create_tables
 from services.node_service import mark_stale_nodes_offline
+from services import ssh_checker
 
 app = FastAPI(
     title="Polaris Master Agent",
@@ -27,7 +28,8 @@ app.include_router(heartbeat.router, prefix=PREFIX, tags=["Heartbeat"])
 app.include_router(metrics.router,   prefix=PREFIX, tags=["Metrics"])
 app.include_router(alerts.router,    prefix=PREFIX, tags=["Alerts"])
 app.include_router(nodes.router,     prefix=PREFIX, tags=["Nodes"])
-app.include_router(status.router,    prefix=PREFIX, tags=["Status"])
+app.include_router(status.router,       prefix=PREFIX, tags=["Status"])
+app.include_router(prom_metrics.router, prefix=PREFIX, tags=["Metrics"])
 
 
 def _offline_detector():
@@ -48,6 +50,7 @@ def startup():
     create_tables()
     t = threading.Thread(target=_offline_detector, daemon=True, name="offline-detector")
     t.start()
+    ssh_checker.start()
     print("[API] Polaris Master Agent started")
 
 

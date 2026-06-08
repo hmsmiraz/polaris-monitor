@@ -79,9 +79,9 @@ def _build_dashboard_json() -> dict:
             ]
         },
         "panels": [
-            _stat_panel(1,  "Online Nodes",  'count(up{job="node_exporter"} == 1)',               0,  0, 4, 3, "green"),
-            _stat_panel(2,  "Offline Nodes", 'count(up{job="node_exporter"} == 0) or vector(0)',  4,  0, 4, 3, "red"),
-            _stat_panel(3,  "Total Nodes",   'count(up{job="node_exporter"})',                    8,  0, 4, 3, "blue"),
+            _stat_panel(1,  "Online Nodes",  'count(polaris_node_up == 1) or vector(0)',          0,  0, 4, 3, "green"),
+            _stat_panel(2,  "Offline Nodes", 'count(polaris_node_up == 0) or vector(0)',          4,  0, 4, 3, "red"),
+            _stat_panel(3,  "Total Nodes",   'count(polaris_node_up)',                            8,  0, 4, 3, "blue"),
             _timeseries_panel(4,  "CPU Usage %",          0,  3, 12, 8,
                 '100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle",instance=~"$instance"}[5m])) * 100)',
                 "percent"),
@@ -99,7 +99,8 @@ def _build_dashboard_json() -> dict:
             _timeseries_panel(9,  "Network Transmit",     12, 19, 12, 8,
                 'rate(node_network_transmit_bytes_total{instance=~"$instance",device!="lo"}[5m])',
                 "bytes"),
-            _table_panel(10, "Node Status",              0,  27, 24, 8),
+            _node_status_table(10, "Node Status",         0,  27, 24, 8),
+            _ssh_table(11,         "SSH Check Status",    0,  35, 24, 8),
         ],
     }
 
@@ -126,19 +127,74 @@ def _timeseries_panel(uid, title, x, y, w, h, expr, unit):
     }
 
 
-def _table_panel(uid, title, x, y, w, h):
+def _node_status_table(uid, title, x, y, w, h):
     return {
         "id": uid, "type": "table", "title": title,
         "gridPos": {"x": x, "y": y, "w": w, "h": h},
-        "targets": [{"datasource": {"type": "prometheus"}, "expr": 'up{job="node_exporter"}',
-                     "instant": True, "legendFormat": "{{instance}}", "refId": "A", "format": "table"}],
-        "transformations": [{"id": "organize", "options": {"excludeByName": {"Time": True, "__name__": True}}}],
-        "fieldConfig": {"overrides": [{"matcher": {"id": "byName", "options": "Value"},
-            "properties": [{"id": "mappings", "value": [{"options": {
-                "0": {"color": "red",   "text": "Offline"},
-                "1": {"color": "green", "text": "Online"}},
-                "type": "value"}]},
-                {"id": "custom.displayMode", "value": "color-background"}]}]},
+        "targets": [
+            {"datasource": {"type": "prometheus"},
+             "expr": "polaris_node_up", "instant": True, "refId": "A", "format": "table"},
+        ],
+        "transformations": [
+            {"id": "organize", "options": {
+                "excludeByName": {"Time": True, "__name__": True, "job": True, "instance": True},
+                "renameByName": {"Value": "Status", "agent_id": "Agent ID",
+                                 "hostname": "Hostname", "private_ip": "Private IP"},
+            }},
+        ],
+        "fieldConfig": {"overrides": [{"matcher": {"id": "byName", "options": "Status"},
+            "properties": [
+                {"id": "mappings", "value": [{"options": {
+                    "0": {"color": "red",   "text": "Offline"},
+                    "1": {"color": "green", "text": "Online"}},
+                    "type": "value"}]},
+                {"id": "custom.displayMode", "value": "color-background"},
+            ]}]},
+    }
+
+
+def _ssh_table(uid, title, x, y, w, h):
+    return {
+        "id": uid, "type": "table", "title": title,
+        "gridPos": {"x": x, "y": y, "w": w, "h": h},
+        "targets": [
+            {"datasource": {"type": "prometheus"},
+             "expr": "polaris_node_ssh", "instant": True, "refId": "A", "format": "table"},
+            {"datasource": {"type": "prometheus"},
+             "expr": "polaris_node_last_ssh_check_seconds", "instant": True, "refId": "B", "format": "table"},
+            {"datasource": {"type": "prometheus"},
+             "expr": "polaris_node_last_seen_seconds", "instant": True, "refId": "C", "format": "table"},
+        ],
+        "transformations": [
+            {"id": "merge", "options": {}},
+            {"id": "organize", "options": {
+                "excludeByName": {"Time": True, "__name__": True, "job": True, "instance": True, "private_ip": True},
+                "renameByName": {
+                    "Value #A": "SSH Status",
+                    "Value #B": "Last SSH Check",
+                    "Value #C": "Last Seen",
+                    "agent_id": "Agent ID",
+                    "hostname": "Hostname",
+                },
+            }},
+        ],
+        "fieldConfig": {
+            "overrides": [
+                {"matcher": {"id": "byName", "options": "SSH Status"},
+                 "properties": [
+                     {"id": "mappings", "value": [{"options": {
+                         "-1": {"color": "yellow", "text": "Unknown"},
+                         "0":  {"color": "red",    "text": "Failed"},
+                         "1":  {"color": "green",  "text": "OK"}},
+                         "type": "value"}]},
+                     {"id": "custom.displayMode", "value": "color-background"},
+                 ]},
+                {"matcher": {"id": "byName", "options": "Last SSH Check"},
+                 "properties": [{"id": "unit", "value": "dateTimeFromNow"}]},
+                {"matcher": {"id": "byName", "options": "Last Seen"},
+                 "properties": [{"id": "unit", "value": "dateTimeFromNow"}]},
+            ],
+        },
     }
 
 
