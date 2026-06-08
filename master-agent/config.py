@@ -48,3 +48,10 @@ GRAFANA_URL = f"http://{GRAFANA_HOST}:{GRAFANA_PORT}"
 # ── Behaviour ──────────────────────────────────────────────────────────────────
 HEARTBEAT_TIMEOUT = int(os.getenv("HEARTBEAT_TIMEOUT", "120"))
 NODE_EXPORTER_PORT = int(os.getenv("NODE_EXPORTER_PORT", "9100"))
+
+# ── Email Alerts (optional) ────────────────────────────────────────────────────
+SMTP_HOST = os.getenv("POLARIS_SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("POLARIS_SMTP_PORT", "587"))
+SMTP_USER = os.getenv("POLARIS_SMTP_USER", "")
+SMTP_PASS = os.getenv("POLARIS_SMTP_PASS", "")
+ALERT_EMAIL_TO = os.getenv("POLARIS_ALERT_EMAIL", "")

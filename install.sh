@@ -177,6 +177,16 @@ GRAFANA_PORT=3000
 GRAFANA_USER=admin
 GRAFANA_PASSWORD=admin
 HEARTBEAT_TIMEOUT=120
+
+# ── Email Alerts (optional) ────────────────────────────────────────────────────
+# Uncomment and fill in to enable email notifications for all alerts.
+# For Gmail: enable 2-Step Verification, then generate an App Password at
+# https://myaccount.google.com/apppasswords
+#POLARIS_SMTP_HOST=smtp.gmail.com
+#POLARIS_SMTP_PORT=587
+#POLARIS_SMTP_USER=you@gmail.com
+#POLARIS_SMTP_PASS=your-16-char-app-password
+#POLARIS_ALERT_EMAIL=alerts@example.com
 EOF
   chmod 600 "$CONFIG_DIR/master.env"
   ok "Config written: $CONFIG_DIR/master.env"

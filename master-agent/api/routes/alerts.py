@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from typing import Optional
 from models.alert import AlertRequest, AlertInfo
 from services import alert_service, node_service
+from services.email_notifier import send_alert_email
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ def receive_alert(req: AlertRequest):
         message=req.message,
         severity=req.severity,
     )
+
     # Pre-mark reboot reason so next heartbeat knows why it rebooted
     if req.alert_type == "auto_reboot":
         from database.connection import get_db
@@ -27,6 +29,16 @@ def receive_alert(req: AlertRequest):
                     "UPDATE nodes SET reboot_reason = 'agent_triggered' WHERE agent_id = %s",
                     (req.agent_id,),
                 )
+
+    # Send email notification (no-op if SMTP not configured)
+    send_alert_email(
+        alert_type=req.alert_type,
+        message=req.message,
+        hostname=node.get("hostname", req.agent_id),
+        private_ip=node.get("private_ip", ""),
+        severity=req.severity,
+    )
+
     return {"status": "received", "alert_id": alert_id}
 
 

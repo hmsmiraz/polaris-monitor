@@ -4,7 +4,7 @@ A lightweight Python-based server monitoring and node management platform.
 One master controls many workers — everything installs with a single command.
 
 ```
-sudo bash install.sh master                                  # on master
+sudo bash install.sh master                                       # on master
 sudo bash install.sh agent --master-ip 10.0.0.10 --token TOKEN   # on each worker
 ```
 
@@ -42,8 +42,9 @@ sudo bash install.sh agent --master-ip 10.0.0.10 --token TOKEN   # on each worke
 - [CLI Reference — Worker](#cli-reference--worker)
 - [API Reference](#api-reference)
 - [Configuration](#configuration)
+- [Email Alerts](#email-alerts)
 - [Ports & Firewall Rules](#ports--firewall-rules)
-- [Auto-Recovery](#auto-recovery)
+- [Auto-Recovery & Auto-Reboot](#auto-recovery--auto-reboot)
 - [Alert Thresholds](#alert-thresholds)
 - [Troubleshooting](#troubleshooting)
 
@@ -62,28 +63,33 @@ sudo bash install.sh agent --master-ip 10.0.0.10 --token TOKEN   # on each worke
 │  │  /api/v1/register    │   └─────────────────────────────────┘  │
 │  │  /api/v1/heartbeat   │                                        │
 │  │  /api/v1/metrics     │   ┌─────────────────────────────────┐  │
-│  │  /api/v1/alerts      │──▶│  /etc/prometheus/file_sd/       │  │
-│  │  /api/v1/nodes       │   │  targets.json  (auto-updated)   │  │
-│  │  /api/v1/status      │   └──────────────┬──────────────────┘  │
-│  └─────────────────────┘                   │                     │
-│                                            ▼                     │
-│  ┌─────────────────────────────────────────────────────────┐     │
-│  │  Prometheus  :9090                                      │     │
-│  │  Scrapes worker exporters every 15 s via file_sd        │     │
-│  └───────────────────────┬─────────────────────────────────┘     │
-│                          │                                       │
-│  ┌───────────────────────▼─────────────────────────────────┐     │
-│  │  Grafana  :3000  (auto-provisioned dashboard)           │     │
-│  └─────────────────────────────────────────────────────────┘     │
+│  │  /api/v1/alerts ─────┼──▶│  Email Notifier (SMTP)          │  │
+│  │  /api/v1/nodes       │   │  optional — Gmail / any SMTP    │  │
+│  │  /api/v1/status      │   └─────────────────────────────────┘  │
+│  └──────────┬──────────┘                                        │
+│             │               ┌─────────────────────────────────┐  │
+│             └──────────────▶│  /etc/prometheus/file_sd/       │  │
+│                             │  targets.json  (auto-updated)   │  │
+│  ┌──────────────────────┐   └──────────────┬──────────────────┘  │
+│  │  SSH Checker Thread  │                  │                     │
+│  │  TCP :22 every 60s   │                  ▼                     │
+│  └──────────────────────┘   ┌─────────────────────────────────┐  │
+│                             │  Prometheus  :9090              │  │
+│                             │  Scrapes exporters via file_sd  │  │
+│                             └───────────────┬─────────────────┘  │
+│                                             │                    │
+│                             ┌───────────────▼─────────────────┐  │
+│                             │  Grafana  :3000  (auto-provisioned dashboard) │  │
+│                             └─────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
               ▲  register / heartbeat / metrics / alerts
               │           HTTP  :8000
   ┌───────────┴──────────────────────────────────────────────────┐
   │           WORKER NODE  (Linux or Windows)                    │
   │                                                              │
-  │  Thread 1  Heartbeat      →  every  60 s                    │
+  │  Thread 1  Heartbeat      →  every  60 s  (boot_time + reason) │
   │  Thread 2  Metrics        →  every  30 s                    │
-  │  Thread 3  Alert Checker  →  every  30 s                    │
+  │  Thread 3  Alert Checker  →  every  30 s  (+ auto-reboot)   │
   │  Thread 4  SSH Checker    →  every  30 min  (Linux only)    │
   │                                                              │
   │  Linux:   node_exporter     :9100/metrics                   │
@@ -112,8 +118,9 @@ polaris-monitor/
 │   │       ├── register.py          POST /api/v1/register
 │   │       ├── heartbeat.py         POST /api/v1/heartbeat
 │   │       ├── metrics.py           POST /api/v1/metrics
-│   │       ├── alerts.py            GET/POST /api/v1/alerts
+│   │       ├── alerts.py            GET/POST /api/v1/alerts  (+ email notify)
 │   │       ├── nodes.py             GET /api/v1/nodes[/{id}]
+│   │       ├── prom_metrics.py      GET /api/v1/prom-metrics (Prometheus endpoint)
 │   │       └── status.py            GET /api/v1/status
 │   │
 │   ├── database/
@@ -124,7 +131,9 @@ polaris-monitor/
 │   ├── services/
 │   │   ├── token_service.py         Join token generate / validate
 │   │   ├── node_service.py          Node CRUD + stale-heartbeat detection
-│   │   └── alert_service.py         Alert CRUD
+│   │   ├── alert_service.py         Alert CRUD
+│   │   ├── ssh_checker.py           Background TCP-22 checker (master-side)
+│   │   └── email_notifier.py        SMTP email on every alert (optional)
 │   │
 │   ├── prometheus/
 │   │   └── config_manager.py        Writes file_sd/targets.json on worker join
@@ -138,13 +147,13 @@ polaris-monitor/
 └── worker-agent/
     ├── main.py                      Daemon — 4 background threads
     ├── cli.py                       polaris CLI (Linux + Windows)
-    ├── config.py                    Cross-platform config paths
+    ├── config.py                    Cross-platform config paths + thresholds
     ├── requirements.txt
     │
     ├── registration/client.py       Register with master → receive agent_id
     ├── collector/metrics_collector.py   psutil metrics
-    ├── heartbeat/heartbeat.py       POST /api/v1/heartbeat
-    ├── alerts/alert_manager.py      Threshold checks + sustain window
+    ├── heartbeat/heartbeat.py       POST /api/v1/heartbeat (boot_time + reboot reason)
+    ├── alerts/alert_manager.py      Threshold checks + sustain window + auto-reboot
     ├── ssh_checker/ssh_checker.py   Linux: check/restart SSH; Windows: skip
     └── services/node_exporter.py    Linux: node_exporter; Windows: windows_exporter
 ```
@@ -350,7 +359,7 @@ polaris-master nodes
 ### Step 1 — Clone or Download the Repository
 
 ```powershell
-git clone https://github.com/your-org/polaris-monitor.git
+git clone https://github.com/hmsmiraz/polaris-monitor.git
 cd polaris-monitor
 ```
 
@@ -457,14 +466,14 @@ http://<MASTER_IP>:3000
 | Field | Value |
 |---|---|
 | Username | `admin` |
-| Password | `admin` |
+| Password | shown at end of `install.sh master` output |
 
 Go to **Dashboards → Polaris Monitor — Node Overview**. Panels:
 
 | Panel | Shows |
 |---|---|
-| Online Nodes | Live count |
-| Offline Nodes | Live count |
+| Online Nodes | Live count (green) |
+| Offline Nodes | Live count (red) |
 | Total Nodes | All registered |
 | CPU Usage % | Time series per node |
 | Memory Usage % | Time series per node |
@@ -472,7 +481,9 @@ Go to **Dashboards → Polaris Monitor — Node Overview**. Panels:
 | Load Average (1m) | Time series per node |
 | Network Receive | Bytes/sec per interface |
 | Network Transmit | Bytes/sec per interface |
-| Node Status Table | Instance / Status / Colour |
+| Node Status Table | Agent ID / Hostname / IP / Online-Offline |
+| SSH Check Status | Last SSH check time, last seen, OK / Failed per node |
+| Reboot History | Last reboot time + reason: Manual / System / Agent Auto-Reboot |
 
 New workers appear automatically — no dashboard changes needed.
 
@@ -566,13 +577,14 @@ Base URL: `http://<MASTER_IP>:8000/api/v1`
 | `POST` | `/register` | Worker registers, receives `agent_id` |
 | `POST` | `/heartbeat` | Worker sends heartbeat every 60 s |
 | `POST` | `/metrics` | Worker sends metrics summary every 30 s |
-| `POST` | `/alerts` | Worker sends an alert |
+| `POST` | `/alerts` | Worker sends an alert (triggers email if configured) |
 | `GET` | `/nodes` | List all nodes |
 | `GET` | `/nodes/{agent_id}` | Node details |
 | `DELETE` | `/nodes/{agent_id}` | Remove a node |
 | `GET` | `/alerts` | List alerts (`?resolved=false&agent_id=…`) |
 | `PUT` | `/alerts/{id}/resolve` | Resolve an alert |
 | `GET` | `/status` | Service health + node counts |
+| `GET` | `/prom-metrics` | Prometheus text-format metrics endpoint |
 
 ---
 
@@ -593,18 +605,35 @@ Base URL: `http://<MASTER_IP>:8000/api/v1`
 | `GRAFANA_PORT` | `3000` | Grafana port |
 | `GRAFANA_PASSWORD` | `admin` | Grafana admin password |
 | `HEARTBEAT_TIMEOUT` | `120` | Seconds before node → offline |
+| `POLARIS_SMTP_HOST` | _(empty)_ | SMTP server hostname (enables email alerts) |
+| `POLARIS_SMTP_PORT` | `587` | SMTP port (TLS/STARTTLS) |
+| `POLARIS_SMTP_USER` | _(empty)_ | SMTP login username |
+| `POLARIS_SMTP_PASS` | _(empty)_ | SMTP password / app password |
+| `POLARIS_ALERT_EMAIL` | _(empty)_ | Recipient address for alert emails |
 
-### Worker — environment variables
+### Worker — `/opt/polaris/worker-agent/config.py`
+
+Edit the file directly or set environment variables before starting the service.
 
 | Variable | Default | Description |
 |---|---|---|
-| `POLARIS_CPU_THRESHOLD` | `90` | CPU % alert threshold |
-| `POLARIS_MEMORY_THRESHOLD` | `90` | Memory % alert threshold |
-| `POLARIS_DISK_THRESHOLD` | `90` | Disk % alert threshold |
+| `POLARIS_CPU_THRESHOLD` | `90` | CPU % to trigger a `high_cpu` alert |
+| `POLARIS_MEMORY_THRESHOLD` | `90` | Memory % to trigger a `high_memory` alert |
+| `POLARIS_DISK_THRESHOLD` | `90` | Disk % to trigger a `high_disk` alert |
 | `POLARIS_METRICS_INTERVAL` | `30` | Metrics send interval (s) |
 | `POLARIS_HEARTBEAT_INTERVAL` | `60` | Heartbeat interval (s) |
-| `POLARIS_SSH_CHECK_INTERVAL` | `1800` | SSH check interval (s) |
-| `POLARIS_ALERT_SUSTAIN` | `300` | Sustain seconds before alerting |
+| `POLARIS_ALERT_SUSTAIN` | `300` | Seconds threshold must be breached before alerting |
+| `POLARIS_REBOOT_CPU_THRESHOLD` | `95` | CPU % to trigger auto-reboot |
+| `POLARIS_REBOOT_MEMORY_THRESHOLD` | `95` | Memory % to trigger auto-reboot |
+| `POLARIS_REBOOT_SUSTAIN` | `300` | Seconds threshold must be breached before auto-reboot |
+
+To **enable auto-reboot**, set `REBOOT_ENABLED = True` in config.py (disabled by default):
+
+```bash
+sudo nano /opt/polaris/worker-agent/config.py
+# Set: REBOOT_ENABLED = True
+sudo systemctl restart polaris-agent
+```
 
 Config file location per OS:
 
@@ -612,6 +641,81 @@ Config file location per OS:
 |---|---|
 | Linux | `/etc/polaris/agent.json` |
 | Windows | `C:\ProgramData\Polaris\agent.json` |
+
+---
+
+## Email Alerts
+
+Polaris sends an email for every alert (high CPU, high memory, high disk, SSH failure, auto-reboot) when SMTP is configured. No extra dependencies — uses Python's built-in `smtplib`.
+
+### Option 1 — Gmail (Recommended)
+
+1. **Enable 2-Step Verification** on your Google account.
+2. Go to [https://myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) and create an App Password (select "Mail" + "Other").
+3. Copy the 16-character password shown.
+
+Edit `/etc/polaris/master.env` on the master:
+
+```bash
+sudo nano /etc/polaris/master.env
+```
+
+Uncomment and fill in the SMTP block:
+
+```env
+POLARIS_SMTP_HOST=smtp.gmail.com
+POLARIS_SMTP_PORT=587
+POLARIS_SMTP_USER=you@gmail.com
+POLARIS_SMTP_PASS=abcd efgh ijkl mnop
+POLARIS_ALERT_EMAIL=alerts@example.com
+```
+
+Restart the master:
+
+```bash
+sudo systemctl restart polaris-master
+```
+
+### Option 2 — Other SMTP Providers
+
+| Provider | Host | Port |
+|---|---|---|
+| Outlook / Hotmail | `smtp.office365.com` | `587` |
+| Yahoo Mail | `smtp.mail.yahoo.com` | `587` |
+| SendGrid | `smtp.sendgrid.net` | `587` |
+| Custom / self-hosted | your SMTP host | `587` or `465` |
+
+Use the same env vars — just change `POLARIS_SMTP_HOST` and credentials.
+
+### Test Email
+
+Trigger a test by sending a manual alert via the API:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/alerts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_id": "<your-agent-id>",
+    "alert_type": "test_alert",
+    "message": "This is a test alert from Polaris Monitor",
+    "severity": "warning"
+  }'
+```
+
+Check the master logs to confirm delivery:
+
+```bash
+journalctl -u polaris-master -n 20 --no-pager | grep email
+# Expected: [email] Alert sent: [WARNING] test_alert — worker-01
+```
+
+### Email Format
+
+Each alert email contains:
+- Severity badge (color-coded: red = critical, orange = warning)
+- Node hostname and IP address
+- Alert type and message
+- UTC timestamp
 
 ---
 
@@ -630,47 +734,79 @@ Config file location per OS:
 
 | Port | From | Purpose |
 |---|---|---|
-| 22 | Admin IPs | SSH |
+| 22 | Admin IPs + Master IP | SSH (master checks this every 60 s) |
 | 9100 | Master IP | Node / Windows Exporter scraping |
 
 ---
 
-## Auto-Recovery
+## Auto-Recovery & Auto-Reboot
 
-### SSH Failure (Linux only)
+### SSH Check (Master-side, Linux workers only)
 
-When SSH is not running or port 22 is closed:
+The master checks TCP port 22 on every registered Linux worker every **60 seconds**.
+Results appear in the **SSH Check Status** table in Grafana (OK / Failed, last check time).
 
-1. Attempts `systemctl restart sshd` (or `ssh`)
+When the worker's own SSH checker detects a failure locally:
+
+1. Attempts `systemctl restart sshd`
 2. Rechecks after 3 seconds
 3. If recovered → sends `ssh_recovered` alert (warning)
 4. If still failing → sends `ssh_failure` alert (critical)
 
 > On Windows, SSH is optional. The SSH checker skips silently.
 
-### High Resource Usage
+### Auto-Reboot (Worker-side, Linux only)
 
-When CPU / Memory / Disk exceeds the threshold **continuously** for `POLARIS_ALERT_SUSTAIN`
-seconds (default 5 minutes):
+When CPU or Memory stays above the reboot threshold continuously for `REBOOT_SUSTAIN_SECONDS`:
 
-1. Sends alert to master
-2. Resets the sustain timer
-3. Alerts again if threshold remains breached for another 5 minutes
+1. Sends `auto_reboot` alert to master (triggers email if configured)
+2. Master pre-marks the node's reboot reason as `agent_triggered`
+3. Worker executes `reboot`
+4. After reboot, the **Reboot History** table in Grafana shows **Agent Auto-Reboot**
 
-> Servers are **never automatically rebooted** in this version.
-> The architecture supports adding a reboot command via the master API in future.
+Auto-reboot is **disabled by default**. To enable:
+
+```bash
+sudo nano /opt/polaris/worker-agent/config.py
+```
+
+```python
+REBOOT_ENABLED = True
+REBOOT_CPU_THRESHOLD    = 95   # reboot if CPU  >= 95% for REBOOT_SUSTAIN_SECONDS
+REBOOT_MEMORY_THRESHOLD = 95   # reboot if RAM  >= 95% for REBOOT_SUSTAIN_SECONDS
+REBOOT_SUSTAIN_SECONDS  = 300  # 5 minutes (use 60 for testing)
+```
+
+```bash
+sudo systemctl restart polaris-agent
+```
+
+### Reboot Reason Detection
+
+The **Reboot History** table classifies each reboot:
+
+| Reason | Meaning |
+|---|---|
+| **Manual** | Node was rebooted with `sudo reboot` or `sudo shutdown -r` |
+| **System / Crash** | Kernel panic, OOM kill, power failure, or AWS stop/start |
+| **Agent Auto-Reboot** | Polaris agent triggered the reboot due to sustained high resource usage |
+
+Detection uses the systemd journal (`journalctl`), which persists across AWS stop/start.
 
 ---
 
 ## Alert Thresholds
 
-| Alert Type | Default | Severity | Sustain Window |
+| Alert Type | Default Threshold | Severity | Sustain Window |
 |---|---|---|---|
 | `high_cpu` | CPU > 90% | warning | 5 min |
 | `high_memory` | Memory > 90% | warning | 5 min |
 | `high_disk` | Disk > 90% | critical | 5 min |
-| `ssh_failure` | SSH down | critical | immediate |
+| `ssh_failure` | SSH port 22 unreachable | critical | immediate |
 | `ssh_recovered` | SSH back up | warning | immediate |
+| `auto_reboot` | CPU > 95% or Memory > 95% | critical | 5 min |
+
+All thresholds are configurable — see [Worker Configuration](#worker----optpolarisworker-agentconfigpy).
 
 ---
 
@@ -726,6 +862,32 @@ sudo systemctl restart prometheus
 ```bash
 # Re-run Grafana setup
 sudo polaris-master init --skip-install
+```
+
+### Email alerts not arriving
+
+```bash
+# Check master logs
+journalctl -u polaris-master -n 30 --no-pager | grep -i email
+
+# Verify settings are loaded
+sudo grep SMTP /etc/polaris/master.env
+
+# Common issues:
+# - Gmail: use an App Password, not your account password
+# - Gmail: 2-Step Verification must be enabled first
+# - Firewall: master must be able to reach port 587 outbound
+```
+
+### SSH Check always shows "Failed" after stopping sshd
+
+On modern Ubuntu, stopping `ssh.service` alone is not enough because the socket
+(`ssh.socket`) keeps port 22 open. Stop both:
+
+```bash
+sudo systemctl stop ssh.socket ssh
+# To restore:
+sudo systemctl start ssh.socket ssh
 ```
 
 ### Windows — polaris command not found
@@ -797,13 +959,13 @@ polaris join --master-ip 10.0.0.10 --token <NEW_TOKEN>
   .\install.ps1 -MasterIP 10.0.0.10 -Token TOKEN # Agent  (Windows)
 
   MASTER CLI
-  polaris-master init        Initialize all components
-  polaris-master token       Show join token
-  polaris-master token --new Generate new token
-  polaris-master nodes       List nodes
+  polaris-master init           Initialize all components
+  polaris-master token          Show join token
+  polaris-master token --new    Generate new token
+  polaris-master nodes          List nodes
   polaris-master nodes --watch  Live node view
-  polaris-master alerts      Recent alerts
-  polaris-master status      Service health
+  polaris-master alerts         Recent alerts
+  polaris-master status         Service health
 
   WORKER CLI
   polaris join --master-ip X --token Y   Join master
@@ -811,10 +973,16 @@ polaris join --master-ip 10.0.0.10 --token <NEW_TOKEN>
   polaris leave                           Leave master
 
   DASHBOARDS
-  http://<MASTER_IP>:8000   Polaris API  (admin)
+  http://<MASTER_IP>:8000        Polaris API
   http://<MASTER_IP>:8000/docs   Swagger UI
-  http://<MASTER_IP>:9090   Prometheus
-  http://<MASTER_IP>:3000   Grafana  (admin / admin)
+  http://<MASTER_IP>:9090        Prometheus
+  http://<MASTER_IP>:3000        Grafana
+
+  EMAIL ALERTS  (edit /etc/polaris/master.env)
+  POLARIS_SMTP_HOST=smtp.gmail.com
+  POLARIS_SMTP_PORT=587
+  POLARIS_SMTP_USER=you@gmail.com
+  POLARIS_SMTP_PASS=<16-char-app-password>
+  POLARIS_ALERT_EMAIL=alerts@example.com
 ─────────────────────────────────────────────────────────────────────
 ```
-
