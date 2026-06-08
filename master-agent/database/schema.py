@@ -3,6 +3,8 @@ from database.connection import get_db
 SCHEMA_SQL = """
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS ssh_status      VARCHAR(20) DEFAULT 'unknown';
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS last_ssh_check  TIMESTAMP;
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS last_boot_time  TIMESTAMP;
+ALTER TABLE nodes ADD COLUMN IF NOT EXISTS reboot_reason   VARCHAR(30) DEFAULT 'unknown';
 
 CREATE TABLE IF NOT EXISTS join_tokens (
     id          SERIAL PRIMARY KEY,

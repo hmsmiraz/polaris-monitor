@@ -18,6 +18,15 @@ def receive_alert(req: AlertRequest):
         message=req.message,
         severity=req.severity,
     )
+    # Pre-mark reboot reason so next heartbeat knows why it rebooted
+    if req.alert_type == "auto_reboot":
+        from database.connection import get_db
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE nodes SET reboot_reason = 'agent_triggered' WHERE agent_id = %s",
+                    (req.agent_id,),
+                )
     return {"status": "received", "alert_id": alert_id}
 
 

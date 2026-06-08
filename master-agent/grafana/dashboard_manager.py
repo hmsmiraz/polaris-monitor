@@ -101,6 +101,7 @@ def _build_dashboard_json() -> dict:
                 "bytes"),
             _node_status_table(10, "Node Status",         0,  27, 24, 8),
             _ssh_table(11,         "SSH Check Status",    0,  35, 24, 8),
+            _reboot_table(12,      "Reboot History",      0,  43, 24, 8),
         ],
     }
 
@@ -184,6 +185,44 @@ def _ssh_table(uid, title, x, y, w, h):
                          "-1": {"color": "yellow", "text": "Unknown"},
                          "0":  {"color": "red",    "text": "Failed"},
                          "1":  {"color": "green",  "text": "OK"}},
+                         "type": "value"}]},
+                     {"id": "custom.displayMode", "value": "color-background"},
+                 ]},
+            ],
+        },
+    }
+
+
+def _reboot_table(uid, title, x, y, w, h):
+    return {
+        "id": uid, "type": "table", "title": title,
+        "gridPos": {"x": x, "y": y, "w": w, "h": h},
+        "targets": [
+            {"datasource": {"type": "prometheus"},
+             "expr": "polaris_node_reboot", "instant": True, "refId": "A", "format": "table"},
+        ],
+        "transformations": [
+            {"id": "organize", "options": {
+                "excludeByName": {
+                    "Time": True, "__name__": True, "job": True,
+                    "instance": True, "private_ip": True, "Value": True,
+                },
+                "renameByName": {
+                    "agent_id": "Agent ID",
+                    "hostname": "Hostname",
+                    "last_boot": "Last Reboot",
+                    "reason": "Reason",
+                },
+            }},
+        ],
+        "fieldConfig": {
+            "overrides": [
+                {"matcher": {"id": "byName", "options": "Reason"},
+                 "properties": [
+                     {"id": "mappings", "value": [{"options": {
+                         "agent": {"color": "orange", "text": "Agent Auto-Reboot"},
+                         "manual/system": {"color": "blue", "text": "Manual / System"},
+                         "unknown": {"color": "gray", "text": "Unknown"}},
                          "type": "value"}]},
                      {"id": "custom.displayMode", "value": "color-background"},
                  ]},

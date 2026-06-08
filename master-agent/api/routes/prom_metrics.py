@@ -44,4 +44,18 @@ def prom_metrics():
                f'last_seen="{_fmt_ts(n.get("last_seen"))}"')
         lines.append(f'polaris_node_ssh{{{lbl}}} {val}')
 
+    lines += [
+        "# HELP polaris_node_reboot Last reboot info per node: 1=has boot time",
+        "# TYPE polaris_node_reboot gauge",
+    ]
+    for n in nodes:
+        if n.get("last_boot_time"):
+            reason = _safe(n.get("reboot_reason") or "unknown")
+            lbl = (f'agent_id="{_safe(n["agent_id"])}",'
+                   f'hostname="{_safe(n["hostname"])}",'
+                   f'private_ip="{_safe(n["private_ip"])}",'
+                   f'last_boot="{_fmt_ts(n.get("last_boot_time"))}",'
+                   f'reason="{reason}"')
+            lines.append(f'polaris_node_reboot{{{lbl}}} 1')
+
     return "\n".join(lines) + "\n"

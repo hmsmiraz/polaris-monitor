@@ -81,12 +81,27 @@ def get_all_nodes() -> List[dict]:
                 SELECT id, agent_id, hostname, private_ip, public_ip,
                        os_info, kernel_version, node_exporter_port,
                        status, registered_at, last_seen,
-                       ssh_status, last_ssh_check
+                       ssh_status, last_ssh_check,
+                       last_boot_time, reboot_reason
                 FROM nodes
                 ORDER BY registered_at DESC
                 """
             )
             return [_row_to_node(row) for row in cur.fetchall()]
+
+
+def update_boot_time(agent_id: str, boot_dt):
+    node = get_node(agent_id)
+    stored = node.get("last_boot_time") if node else None
+    # Detect reboot: boot time changed by more than 60 seconds
+    if stored is None or abs((boot_dt - stored).total_seconds()) > 60:
+        reason = "agent" if node and node.get("reboot_reason") == "agent_triggered" else "manual/system"
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE nodes SET last_boot_time = %s, reboot_reason = %s WHERE agent_id = %s",
+                    (boot_dt, reason, agent_id),
+                )
 
 
 def update_ssh_check(agent_id: str, status: str):
@@ -140,4 +155,6 @@ def _row_to_node(row: tuple) -> dict:
         "last_seen": row[10],
         "ssh_status": row[11] if len(row) > 11 else "unknown",
         "last_ssh_check": row[12] if len(row) > 12 else None,
+        "last_boot_time": row[13] if len(row) > 13 else None,
+        "reboot_reason": row[14] if len(row) > 14 else "unknown",
     }
