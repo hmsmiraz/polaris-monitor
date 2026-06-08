@@ -174,13 +174,6 @@ def _ssh_table(uid, title, x, y, w, h):
                     "last_seen": "Last Seen",
                     "Value": "SSH Status",
                 },
-                "indexByName": {
-                    "agent_id": 0,
-                    "hostname": 1,
-                    "Value": 2,
-                    "last_ssh_check": 3,
-                    "last_seen": 4,
-                },
             }},
         ],
         "fieldConfig": {
