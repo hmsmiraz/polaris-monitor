@@ -1,3 +1,4 @@
+import os
 import time
 import requests
 from collector.metrics_collector import collect
@@ -41,10 +42,22 @@ def _check_threshold(
     return False
 
 
+def _do_reboot(reason: str, master_ip: str, master_port: int, agent_id: str):
+    _send_alert(master_ip, master_port, agent_id,
+                alert_type="auto_reboot",
+                message=f"Auto-rebooting node: {reason}",
+                severity="critical")
+    time.sleep(2)
+    print(f"[alert] Auto-reboot triggered: {reason}")
+    os.system("reboot")
+
+
 def check_and_alert(master_ip: str, master_port: int, agent_id: str):
     from config import (
         CPU_ALERT_THRESHOLD, MEMORY_ALERT_THRESHOLD,
-        DISK_ALERT_THRESHOLD, ALERT_SUSTAIN_SECONDS
+        DISK_ALERT_THRESHOLD, ALERT_SUSTAIN_SECONDS,
+        REBOOT_ENABLED, REBOOT_CPU_THRESHOLD,
+        REBOOT_MEMORY_THRESHOLD, REBOOT_SUSTAIN_SECONDS,
     )
 
     metrics = collect()
@@ -56,7 +69,7 @@ def check_and_alert(master_ip: str, master_port: int, agent_id: str):
             message=f"CPU usage is {metrics['cpu_percent']:.1f}% (threshold: {CPU_ALERT_THRESHOLD}%)",
             severity="warning",
         )
-        _breach_start.pop("cpu", None)  # Reset after alerting
+        _breach_start.pop("cpu", None)
 
     if _check_threshold("memory", metrics["memory_percent"], MEMORY_ALERT_THRESHOLD, ALERT_SUSTAIN_SECONDS):
         _send_alert(
@@ -75,6 +88,23 @@ def check_and_alert(master_ip: str, master_port: int, agent_id: str):
             severity="critical",
         )
         _breach_start.pop("disk", None)
+
+    if REBOOT_ENABLED:
+        if _check_threshold("reboot_cpu", metrics["cpu_percent"],
+                            REBOOT_CPU_THRESHOLD, REBOOT_SUSTAIN_SECONDS):
+            _do_reboot(
+                f"CPU {metrics['cpu_percent']:.1f}% >= {REBOOT_CPU_THRESHOLD}% "
+                f"for {REBOOT_SUSTAIN_SECONDS}s",
+                master_ip, master_port, agent_id,
+            )
+            return
+        if _check_threshold("reboot_mem", metrics["memory_percent"],
+                            REBOOT_MEMORY_THRESHOLD, REBOOT_SUSTAIN_SECONDS):
+            _do_reboot(
+                f"Memory {metrics['memory_percent']:.1f}% >= {REBOOT_MEMORY_THRESHOLD}% "
+                f"for {REBOOT_SUSTAIN_SECONDS}s",
+                master_ip, master_port, agent_id,
+            )
 
 
 def send_custom_alert(
