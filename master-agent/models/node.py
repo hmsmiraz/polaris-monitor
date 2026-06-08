@@ -22,6 +22,7 @@ class RegisterResponse(BaseModel):
 class HeartbeatRequest(BaseModel):
     agent_id: str
     boot_time: Optional[float] = None
+    reboot_reason: Optional[str] = None
 
 
 class HeartbeatResponse(BaseModel):

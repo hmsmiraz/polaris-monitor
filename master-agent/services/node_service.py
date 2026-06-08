@@ -90,12 +90,16 @@ def get_all_nodes() -> List[dict]:
             return [_row_to_node(row) for row in cur.fetchall()]
 
 
-def update_boot_time(agent_id: str, boot_dt):
+def update_boot_time(agent_id: str, boot_dt, worker_reason: str = None):
     node = get_node(agent_id)
     stored = node.get("last_boot_time") if node else None
-    # Detect reboot: boot time changed by more than 60 seconds
     if stored is None or abs((boot_dt - stored).total_seconds()) > 60:
-        reason = "agent" if node and node.get("reboot_reason") == "agent_triggered" else "manual/system"
+        if node and node.get("reboot_reason") == "agent_triggered":
+            reason = "agent"
+        elif worker_reason in ("manual", "system"):
+            reason = worker_reason
+        else:
+            reason = "unknown"
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute(

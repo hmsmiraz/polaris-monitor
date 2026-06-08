@@ -14,7 +14,7 @@ def heartbeat(req: HeartbeatRequest):
 
     if req.boot_time is not None:
         boot_dt = datetime.fromtimestamp(req.boot_time, tz=timezone.utc).replace(tzinfo=None)
-        node_service.update_boot_time(req.agent_id, boot_dt)
+        node_service.update_boot_time(req.agent_id, boot_dt, req.reboot_reason)
 
     return HeartbeatResponse(
         status="ok",

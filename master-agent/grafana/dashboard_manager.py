@@ -220,9 +220,10 @@ def _reboot_table(uid, title, x, y, w, h):
                 {"matcher": {"id": "byName", "options": "Reason"},
                  "properties": [
                      {"id": "mappings", "value": [{"options": {
-                         "agent": {"color": "orange", "text": "Agent Auto-Reboot"},
-                         "manual/system": {"color": "blue", "text": "Manual / System"},
-                         "unknown": {"color": "gray", "text": "Unknown"}},
+                         "agent":   {"color": "orange", "text": "Agent Auto-Reboot"},
+                         "manual":  {"color": "blue",   "text": "Manual"},
+                         "system":  {"color": "red",    "text": "System / Crash"},
+                         "unknown": {"color": "gray",   "text": "Unknown"}},
                          "type": "value"}]},
                      {"id": "custom.displayMode", "value": "color-background"},
                  ]},
